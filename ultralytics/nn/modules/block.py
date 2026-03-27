@@ -4451,7 +4451,7 @@ class PGCR_Recurrent(nn.Module):
         self,
         channels,
         num_prototypes=8,
-        reduction=4,
+        reduction=2,
         use_norm=True,
         refine_steps=3,
         use_global_ref=False,

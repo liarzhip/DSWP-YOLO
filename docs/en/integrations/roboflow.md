@@ -132,7 +132,7 @@ project = rf.workspace(WORKSPACE_ID).project(PROJECT_ID)
 dataset = project.version(VERSION)
 
 # Upload model weights for deployment
-# Ensure MODEL_PATH points to the directory containing 'best.pt'
+# Ensure MODEL_PATH points to the directory containing 'best0.7880.pt'
 dataset.deploy(
     model_type="yolov8",
     model_path=MODEL_PATH,

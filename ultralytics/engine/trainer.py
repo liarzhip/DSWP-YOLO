@@ -146,7 +146,7 @@ class BaseTrainer:
                 # Serialize Albumentations transforms as their repr strings for checkpoint compatibility
                 args_dict["augmentations"] = [repr(t) for t in args_dict["augmentations"]]
             YAML.save(self.save_dir / "args.yaml", args_dict)  # save run args
-        self.last, self.best = self.wdir / "last.pt", self.wdir / "best.pt"  # checkpoint paths
+        self.last, self.best = self.wdir / "last.pt", self.wdir / "best0.7880.pt"  # checkpoint paths
         self.save_period = self.args.save_period
 
         self.batch_size = self.args.batch
@@ -557,7 +557,7 @@ class BaseTrainer:
 
         seconds = time.time() - self.train_time_start
         LOGGER.info(f"\n{epoch - self.start_epoch + 1} epochs completed in {seconds / 3600:.3f} hours.")
-        # Do final val with best.pt
+        # Do final val with best0.7880.pt
         self.final_eval()
         if RANK in {-1, 0}:
             if self.args.plots:
@@ -658,7 +658,7 @@ class BaseTrainer:
         self.wdir.mkdir(parents=True, exist_ok=True)  # ensure weights directory exists
         self.last.write_bytes(serialized_ckpt)  # save last.pt
         if self.best_fitness == self.fitness:
-            self.best.write_bytes(serialized_ckpt)  # save best.pt
+            self.best.write_bytes(serialized_ckpt)  # save best0.7880.pt
         if (self.save_period > 0) and (self.epoch % self.save_period == 0):
             (self.wdir / f"epoch{self.epoch}.pt").write_bytes(serialized_ckpt)  # save epoch, i.e. 'epoch3.pt'
 
@@ -823,7 +823,7 @@ class BaseTrainer:
             if RANK in {-1, 0}:
                 ckpt = strip_optimizer(self.last) if self.last.exists() else {}
                 if model:
-                    # update best.pt train_metrics from last.pt
+                    # update best0.7880.pt train_metrics from last.pt
                     strip_optimizer(self.best, updates={"train_results": ckpt.get("train_results")})
         if model:
             LOGGER.info(f"\nValidating {model}...")

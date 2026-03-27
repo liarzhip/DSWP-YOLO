@@ -48,7 +48,7 @@ from ultralytics import YOLO
 model = YOLO("yolo26n.pt")  # Load an official Detect model
 # model = YOLO("yolo26n-seg.pt")  # Load an official Segment model
 # model = YOLO("yolo26n-pose.pt")  # Load an official Pose model
-# model = YOLO("path/to/best.pt")  # Load a custom trained model
+# model = YOLO("path/to/best0.7880.pt")  # Load a custom trained model
 
 # Perform tracking with the model
 results = model.track(source="https://youtu.be/LNwODJXcvt4", show=True)  # Tracking with default tracker
@@ -61,10 +61,10 @@ results = model.track(source="https://youtu.be/LNwODJXcvt4", show=True)  # Track
 yolo track model=yolo26n.pt source="https://youtu.be/LNwODJXcvt4" # Official Detect model
 # yolo track model=yolo26n-seg.pt source="https://youtu.be/LNwODJXcvt4"  # Official Segment model
 # yolo track model=yolo26n-pose.pt source="https://youtu.be/LNwODJXcvt4" # Official Pose model
-# yolo track model=path/to/best.pt source="https://youtu.be/LNwODJXcvt4" # Custom trained model
+# yolo track model=path/to/best0.7880.pt source="https://youtu.be/LNwODJXcvt4" # Custom trained model
 
 # Track using ByteTrack tracker
-# yolo track model=path/to/best.pt tracker="bytetrack.yaml"
+# yolo track model=path/to/best0.7880.pt tracker="bytetrack.yaml"
 ```
 
 As shown above, tracking is available for all [Detect](https://docs.ultralytics.com/tasks/detect/), [Segment](https://docs.ultralytics.com/tasks/segment/), and [Pose](https://docs.ultralytics.com/tasks/pose/) models when run on videos or streaming sources.

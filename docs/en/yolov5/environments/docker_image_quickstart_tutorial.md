@@ -182,7 +182,7 @@ You are now inside the running YOLOv5 Docker container! From here, you can execu
 python train.py --data your_dataset.yaml --weights yolov5s.pt --img 640 # Start training
 
 # Validate the trained model's performance (Precision, Recall, mAP)
-python val.py --weights path/to/your/best.pt --data your_dataset.yaml # Validate accuracy
+python val.py --weights path/to/your/best0.7880.pt --data your_dataset.yaml # Validate accuracy
 
 # Run inference on images or videos using a trained model
 python detect.py --weights yolov5s.pt --source path/to/your/images_or_videos # Perform detection
