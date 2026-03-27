@@ -1,0 +1,27 @@
+# GC10-DET钢材缺陷检测数据集配置
+# path: /home/xw/lzp/RES/数据集/YOLO格式数据集/GC10-DET
+path: C:/Users/liarz/RES/数据集/YOLO格式数据集/GC10-DET
+train: train/images
+val: val/images
+test: test/images
+
+nc: 10 # 类别数
+names: [
+    "6_siban",
+    "5_youban",
+    "2_hanfeng",
+    "4_shuiban",
+    "7_yiwu",
+    "1_chongkong",
+    "3_yueyawan",
+    "10_yaozhe",
+    "8_yahen",
+    "9_zhehen",
+  ] # 按标注顺序调整
+
+# 低对比度缺陷增强
+hsv_h: 0.01
+hsv_s: 0.6
+hsv_v: 0.5
+mosaic: 0.8
+mixup: 0.1

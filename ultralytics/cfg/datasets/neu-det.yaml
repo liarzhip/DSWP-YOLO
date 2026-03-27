@@ -1,0 +1,23 @@
+# NEU-DET钢板缺陷检测数据集配置
+#path: /home/xw/lzp/RES/数据集/YOLO格式数据集/NEU-DET
+path: C:/Users/liarz/RES/数据集/YOLO格式数据集/NEU-DET
+train: train/images
+val: val/images
+test: test/images
+
+nc: 6 # 类别数
+names: [
+    "inclusion",
+    "patches",
+    "crazing",
+    "rolled-in_scale",
+    "scratches",
+    "pitted_surface",
+  ] # 标准NEU-DET类别
+
+# 小目标增强
+hsv_h: 0.02
+hsv_s: 0.5
+hsv_v: 0.3
+mosaic: 0.9
+mixup: 0.1

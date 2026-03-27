@@ -1,0 +1,28 @@
+# APSPC铝型材缺陷检测数据集配置
+# path: /home/xw/lzp/RES/数据集/YOLO格式数据集/APSPC # 相对Yolo目录的路径
+path: C:/Users/liarz/RES/数据集/YOLO格式数据集/APSPC # 相对Yolo目录的路径
+train: train/images # 训练集图片路径
+val: val/images # 验证集图片路径
+test: test/images # 测试集图片路径
+
+# 类别配置
+nc: 10 # 类别数
+names: [
+    "budaodian",
+    "zangdian",
+    "qikeng",
+    "cahua",
+    "jupi",
+    "tufen",
+    "aoxian",
+    "loudi",
+    "tucengkailie",
+    "pengshang",
+  ] # 按你的标注类别顺序填写
+
+# 增强配置（可选，针对小目标）
+hsv_h: 0.015 # 色相增强
+hsv_s: 0.7 # 饱和度增强
+hsv_v: 0.4 # 明度增强
+mosaic: 1.0 # Mosaic增强
+mixup: 0.2 # MixUp增强
