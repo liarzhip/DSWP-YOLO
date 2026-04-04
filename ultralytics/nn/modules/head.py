@@ -179,14 +179,15 @@ class WCAPGCRSAFusion(nn.Module):
 
     def forward(self, x):
         fw = self.wca(x)
-        fp = self.pgcr(x)
+        # fp = self.pgcr(x)
 
         # 更稳的方式：只融合增量
         if self.use_delta:
             fw = fw - x
-            fp = fp - x
+            # fp = fp - x
 
-        f_pre = self.fuse(torch.cat([fw, fp], dim=1))  # WCA/PCA 先融合
+        # f_pre = self.fuse(torch.cat([fw, fp], dim=1))  # WCA/PCA 先融合
+        f_pre = fw
         f_sa = self.sa(f_pre)  # SA(F_pre)
         f_out = f_sa + f_pre + x
         # 残差接在 SA 前后
@@ -281,6 +282,7 @@ class Detect(nn.Module):
 
         # 只给 cls 分支用的 prototype-guided refinement
         self.cls_refine = nn.ModuleList(WCAPGCRSAFusion(c) if i < 3 else nn.Identity() for i, c in enumerate(ch))
+        self.one2one_cls_refine = None
 
         if end2end:
             self.one2one_cv2 = copy.deepcopy(self.cv2)
@@ -318,28 +320,53 @@ class Detect(nn.Module):
         """Concatenates and returns predicted bounding boxes and class probabilities."""
         if box_head is None or cls_head is None:  # for fused inference
             return dict()
+
         bs = x[0].shape[0]  # batch size
-        boxes = torch.cat([box_head[i](x[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)], dim=-1)
-        scores = torch.cat(
-            [
-                cls_head[i](cls_refine[i](x[i]) if cls_refine is not None else x[i]).view(bs, self.nc, -1)
-                for i in range(self.nl)
-            ],
+
+        # bbox 分支：始终直接走原始特征
+        boxes = torch.cat(
+            [box_head[i](x[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)],
             dim=-1,
         )
+
+        # cls 分支：只有在 cls_refine 存在时才做 refine
+        score_list = []
+        for i in range(self.nl):
+            cls_feat = x[i]
+            if cls_refine is not None:
+                cls_feat = cls_refine[i](cls_feat)
+            score_list.append(cls_head[i](cls_feat).view(bs, self.nc, -1))
+
+        scores = torch.cat(score_list, dim=-1)
+
         return dict(boxes=boxes, scores=scores, feats=x)
 
     def forward(
         self, x: list[torch.Tensor]
     ) -> dict[str, torch.Tensor] | torch.Tensor | tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Concatenates and returns predicted bounding boxes and class probabilities."""
-        preds = self.forward_head(x, **self.one2many, cls_refine=self.cls_refine)
+
+        # 兼容旧 checkpoint：旧模型可能没有 cls_refine / one2one_cls_refine
+        cls_refine = getattr(self, "cls_refine", None)
+        one2many = getattr(self, "one2many", {})
+
+        preds = self.forward_head(x, **one2many, cls_refine=cls_refine)
+
         if self.end2end:
             x_detach = [xi.detach() for xi in x]
-            one2one = self.forward_head(x_detach, **self.one2one, cls_refine=self.one2one_cls_refine)
-            preds = {"one2many": preds, "one2one": one2one}
+            one2one_cls_refine = getattr(self, "one2one_cls_refine", None)
+            one2one = getattr(self, "one2one", {})
+
+            one2one_preds = self.forward_head(
+                x_detach,
+                **one2one,
+                cls_refine=one2one_cls_refine,
+            )
+            preds = {"one2many": preds, "one2one": one2one_preds}
+
         if self.training:
             return preds
+
         y = self._inference(preds["one2one"] if self.end2end else preds)
         if self.end2end:
             y = self.postprocess(y.permute(0, 2, 1))
