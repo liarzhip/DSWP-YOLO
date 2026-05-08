@@ -4453,7 +4453,7 @@ class PGCR_Recurrent(nn.Module):
         num_prototypes=8,
         reduction=4,
         use_norm=True,
-        refine_steps=3,
+        refine_steps=2,
         use_global_ref=False,
         global_ref_weight=0.01,
     ):

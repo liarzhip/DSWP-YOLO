@@ -387,7 +387,7 @@ class HUBTrainingSession:
                     "For more reliable training, consider using Ultralytics HUB Cloud. "
                     "Learn more at https://docs.ultralytics.com/hub/cloud-training."
                 )
-                shutil.copy(last, weights)  # copy last.pt to best0.7880.pt
+                shutil.copy(last, weights)  # copy last.pt to best.pt
             else:
                 LOGGER.warning(f"{PREFIX} Model upload issue. Missing model {weights}.")
                 return
