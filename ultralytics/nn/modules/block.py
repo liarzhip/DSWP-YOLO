@@ -37,6 +37,7 @@ __all__ = (
     "C2fAttn",
     "C2fCIB",
     "C2fPSA",
+    "C2fWP",
     "C3Ghost",
     "C3k2",
     "C3x",
@@ -48,6 +49,7 @@ __all__ = (
     "HGStem",
     "ImagePoolingAttn",
     "Proto",
+    "PrototypeAttention",
     "RepC3",
     "RepNCSPELAN4",
     "RepVGGDW",
@@ -55,8 +57,6 @@ __all__ = (
     "SCDown",
     "TorchVision",
     "WaveletSpatialAttention",
-    "PrototypeAttention",
-    "C2fWP",
 )
 
 
@@ -2075,14 +2075,13 @@ class RealNVP(nn.Module):
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 KL_LOSS_CONTAINER = []
 # ===================== 小波变换核心工具函数 =====================
 
 
 def get_haar_wavelet_recon_kernel(in_channels, dtype=torch.float32):
-    """生成Haar小波重构核（转置卷积用）"""
+    """生成Haar小波重构核（转置卷积用）."""
     harr_wav_L = 1 / np.sqrt(2) * np.ones((1, 2))
     harr_wav_H = 1 / np.sqrt(2) * np.ones((1, 2))
     harr_wav_H[0, 0] = -1 * harr_wav_H[0, 0]
@@ -2108,19 +2107,13 @@ def get_haar_wavelet_recon_kernel(in_channels, dtype=torch.float32):
 # ===================== 核心注意力模块（精准匹配你的逻辑） =====================
 # -------------------------- 小波空间注意力（带残差） --------------------------
 class WaveletSpatialAttention_old(nn.Module):
-    """
-    最终精准版：LL与每个方向高频单独融合→生成对应权重→加权对应高频 + 残差连接
-    核心流程：
-    1. 小波分解 → LL + LH(垂直)/HL(水平)/HH(对角)
-    2. LL+LH → 多尺度卷积 → attn_LH → LH*attn_LH
-    3. LL+HL → 多尺度卷积 → attn_HL → HL*attn_HL
-    4. LL+HH → 多尺度卷积 → attn_HH → HH*attn_HH
-    5. 小波重构（LL + 加权后LH/HL/HH）
-    6. 残差连接：重构输出 + 原始输入
+    """最终精准版：LL与每个方向高频单独融合→生成对应权重→加权对应高频 + 残差连接 核心流程： 1. 小波分解 → LL + LH(垂直)/HL(水平)/HH(对角) 2. LL+LH → 多尺度卷积 → attn_LH →
+    LH*attn_LH 3. LL+HL → 多尺度卷积 → attn_HL → HL*attn_HL 4. LL+HH → 多尺度卷积 → attn_HH → HH*attn_HH 5. 小波重构（LL +
+    加权后LH/HL/HH） 6. 残差连接：重构输出 + 原始输入.
     """
 
     def __init__(self, in_channels, dilation=2, dtype=torch.float32):
-        super(WaveletSpatialAttention_old, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.dilation = dilation
 
@@ -2165,8 +2158,8 @@ class WaveletSpatialAttention_old(nn.Module):
         self.conv_out = nn.Conv2d(in_channels, in_channels, 3, 1, 1, dilation=1, bias=False, groups=1)
 
     def wavelet_decompose(self, x):
-        """小波分解：输入特征 → LL(低频) + LH/HL/HH(分方向高频)"""
-        B, C, H_ori, W_ori = x.shape
+        """小波分解：输入特征 → LL(低频) + LH/HL/HH(分方向高频)."""
+        _B, C, H_ori, W_ori = x.shape
 
         # 尺寸补全（适配stride=2的小波分解）
         pad_h = (2 - H_ori % 2) % 2
@@ -2182,8 +2175,8 @@ class WaveletSpatialAttention_old(nn.Module):
         return LL, LH, HL, HH, (H_ori, W_ori)
 
     def wavelet_reconstruct(self, LL, LH, HL, HH, ori_size):
-        """小波重构：频域分量 → 空间特征"""
-        B, C = LL.shape[0], LL.shape[1]
+        """小波重构：频域分量 → 空间特征."""
+        _B, C = LL.shape[0], LL.shape[1]
         H_ori, W_ori = ori_size
 
         # 转置卷积实现小波重构（上采样回原始尺寸）
@@ -2199,19 +2192,15 @@ class WaveletSpatialAttention_old(nn.Module):
         return x_recon
 
     def forward(self, x):
-        """
-        严格按照你的逻辑执行 + 残差连接：
-        1. 小波分解得到LL、LH、HL、HH
-        2. 对每个方向：LL+高频 → 多尺度卷积 → sigmoid生成权重 → 加权对应高频
-        3. 小波重构输出
-        4. 残差连接：重构输出 + 原始输入
+        """严格按照你的逻辑执行 + 残差连接： 1. 小波分解得到LL、LH、HL、HH 2. 对每个方向：LL+高频 → 多尺度卷积 → sigmoid生成权重 → 加权对应高频 3. 小波重构输出 4. 残差连接：重构输出
+        + 原始输入.
         """
         # ========== 关键改动1：保存原始输入（残差分支） ==========
         residual = x
 
         # 步骤1：小波分解（空间→频域，保留分方向高频）
         LL, LH, HL, HH, ori_size = self.wavelet_decompose(x)
-        B, C, H, W = LL.shape
+        _B, _C, _H, _W = LL.shape
 
         # ===================== 垂直方向（LH）：LL+LH → 生成attn_LH → 加权LH =====================
         # LL与LH逐像素相加（你的核心要求）
@@ -2264,11 +2253,8 @@ class WaveletSpatialAttention_old(nn.Module):
 
 # -------------------------- 原型注意力（带残差） --------------------------
 class PrototypeAttention(nn.Module):
-    """
-    终极修复版PA模块（彻底解决维度不匹配+保留所有你的逻辑）：
-    1. 核心修复：4维重塑+expand替代repeat，避免维度错位
-    2. 保留：C≠M/3维BN/torch.max降维/Q_L2广播/3×3卷积/Sigmoid
-    3. 全维度校验+数值稳定性兜底
+    """终极修复版PA模块（彻底解决维度不匹配+保留所有你的逻辑）： 1. 核心修复：4维重塑+expand替代repeat，避免维度错位 2. 保留：C≠M/3维BN/torch.max降维/Q_L2广播/3×3卷积/Sigmoid
+    3. 全维度校验+数值稳定性兜底.
     """
 
     def __init__(self, in_channels, num_prototypes=8):
@@ -2392,7 +2378,7 @@ class PrototypeAttention(nn.Module):
 
 # ===================== 集成到C2fWP模块 =====================
 class C2fW(nn.Module):
-    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）"""
+    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）."""
 
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
         super().__init__()
@@ -2415,7 +2401,7 @@ class C2fW(nn.Module):
         # self.shortcut = shortcut
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """完全复用官方C2f的前向逻辑"""
+        """完全复用官方C2f的前向逻辑."""
         return self.Wast(x)
         # x1 = self.gsb(self.Wast(self.cv1(x)))
         # y = self.cv2(x)
@@ -2423,7 +2409,7 @@ class C2fW(nn.Module):
         # return self.cv3(torch.cat((y, x1),dim=1))
 
     def forward_split(self, x: torch.Tensor) -> torch.Tensor:
-        """可选：拆分式前向（用于部署/调试）"""
+        """可选：拆分式前向（用于部署/调试）."""
         y = self.cv1(x).split((self.c, self.c), 1)
         y = [y[0], y[1]]
         y.extend(m(y[-1]) for m in self.m)
@@ -2431,7 +2417,7 @@ class C2fW(nn.Module):
 
 
 class C2fP(nn.Module):
-    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）"""
+    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）."""
 
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
         super().__init__()
@@ -2445,14 +2431,14 @@ class C2fP(nn.Module):
         self.cv3 = Conv(2 * self.c, c2, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """完全复用官方C2f的前向逻辑"""
+        """完全复用官方C2f的前向逻辑."""
         return self.PA(x)
         # x1 = self.gsb(self.cv1(x))
         # y = self.cv2(x)
         # return self.PA(self.cv3(torch.cat((y,x1), dim=1)))
 
     def forward_split(self, x: torch.Tensor) -> torch.Tensor:
-        """可选：拆分式前向（用于部署/调试）"""
+        """可选：拆分式前向（用于部署/调试）."""
         y = self.cv1(x).split((self.c, self.c), 1)
         y = [y[0], y[1]]
         y.extend(m(y[-1]) for m in self.m)
@@ -2486,7 +2472,7 @@ class ChannelSplitAttentionBlock(nn.Module):
 
 
 class C2fWP(nn.Module):
-    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）"""
+    """适配YOLO的C2fWP模块（集成最终精准版小波注意力）."""
 
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
         super().__init__()
@@ -2500,14 +2486,14 @@ class C2fWP(nn.Module):
         self.cv3 = Conv(2 * self.c, c2, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """完全复用官方C2f的前向逻辑"""
+        """完全复用官方C2f的前向逻辑."""
         x1 = self.gsb(self.Wast(self.cv1(x)))
         # x1 = self.gsb(self.cv1(x))
         y = self.cv2(x)
         return self.PA(self.cv3(torch.cat((y, x1), dim=1)))
 
     def forward_split(self, x: torch.Tensor) -> torch.Tensor:
-        """可选：拆分式前向（用于部署/调试）"""
+        """可选：拆分式前向（用于部署/调试）."""
         y = self.cv1(x).split((self.c, self.c), 1)
         y = [y[0], y[1]]
         y.extend(m(y[-1]) for m in self.m)
@@ -2515,10 +2501,8 @@ class C2fWP(nn.Module):
 
 
 class GSConv(nn.Module):
-    """
-    GSConv enhancement for representation learning: generate various receptive-fields and
-    texture-features only in one Conv module
-    https://github.com/AlanLi1997/slim-neck-by-gsconv
+    """GSConv enhancement for representation learning: generate various receptive-fields and texture-features only in
+    one Conv module https://github.com/AlanLi1997/slim-neck-by-gsconv.
     """
 
     def __init__(self, c1, c2, k=1, s=1, g=1, d=1, act=True):
@@ -2586,14 +2570,12 @@ class VoVGSCSP(nn.Module):
 
 
 class SNI(nn.Module):
-    """
-    https://github.com/AlanLi1997/rethinking-fpn
-    soft nearest neighbor interpolation for up-sampling
-    secondary features aligned
+    """https://github.com/AlanLi1997/rethinking-fpn soft nearest neighbor interpolation for up-sampling secondary
+    features aligned.
     """
 
     def __init__(self, c1=0, c2=0, up_f=2):
-        super(SNI, self).__init__()
+        super().__init__()
         self.us = nn.Upsample(None, up_f, "nearest")
         self.alpha = 1 / math.sqrt(up_f)
         # self.alpha = 1/math.sqrt(math.sqrt(up_f)
@@ -2619,10 +2601,8 @@ class DSConv(nn.Module):
 
 
 class GSConvE(nn.Module):
-    """
-    GSConv enhancement for representation learning: generate various receptive-fields and
-    texture-features only in one Conv module
-    https://github.com/AlanLi1997/slim-neck-by-gsconv
+    """GSConv enhancement for representation learning: generate various receptive-fields and texture-features only in
+    one Conv module https://github.com/AlanLi1997/slim-neck-by-gsconv.
     """
 
     def __init__(self, c1, c2, k=1, s=1, g=1, d=1, act=True):
@@ -2668,10 +2648,7 @@ class GSConvE2(nn.Module):
 
 
 class ESD(nn.Module):
-    """
-    https://github.com/AlanLi1997/rethinking-fpn
-    Extended spatial window for down-sampling
-    lightweight fusion
+    """https://github.com/AlanLi1997/rethinking-fpn Extended spatial window for down-sampling lightweight fusion.
     """
 
     def __init__(self, c1, c2, k=3, s=2, g=1, d=1, act=True):
@@ -2689,10 +2666,7 @@ class ESD(nn.Module):
 
 
 class ESD2(nn.Module):
-    """
-    https://github.com/AlanLi1997/rethinking-fpn
-    Extended spatial window for down-sampling
-    learnable linearly fusion
+    """https://github.com/AlanLi1997/rethinking-fpn Extended spatial window for down-sampling learnable linearly fusion.
     """
 
     def __init__(self, c1, c2, k=3, s=2, g=1, d=1, act=True):
@@ -2872,7 +2846,7 @@ class WindowMHSA(nn.Module):
         return x
 
     def forward(self, x):
-        B, C, H, W = x.shape
+        _B, _C, H, W = x.shape
 
         qkv = self.qkv(x)
         q, k, v = torch.chunk(qkv, 3, dim=1)
@@ -2901,10 +2875,7 @@ class WindowMHSA(nn.Module):
 
 
 class ECAAttention(nn.Module):
-    """
-    Efficient Channel Attention
-    Reference idea:
-        GAP -> 1D Conv -> Sigmoid -> Channel Reweight
+    """Efficient Channel Attention Reference idea: GAP -> 1D Conv -> Sigmoid -> Channel Reweight.
     """
 
     def __init__(self, channels, k_size=3):
@@ -2939,12 +2910,7 @@ class BasicConv(nn.Module):
 
 # ================= Wavelet + ECA (Lightweight) =================
 class WaveletSpatialAttention(nn.Module):
-    """
-    改进点：
-    1. 轻量化：去掉 WindowMHSA，改用 ECA
-    2. 残差式增强
-    3. 高频使用 cat(LH, HL, HH) 后 1x1 压缩，保留方向信息
-    4. 适合接在降维后的分支上
+    """改进点： 1. 轻量化：去掉 WindowMHSA，改用 ECA 2. 残差式增强 3. 高频使用 cat(LH, HL, HH) 后 1x1 压缩，保留方向信息 4. 适合接在降维后的分支上.
     """
 
     def __init__(self, in_channels, out_channels=None, eca_kernel_size=3):
@@ -2983,10 +2949,8 @@ class WaveletSpatialAttention(nn.Module):
             )
 
     def dwt(self, x):
-        """
-        Haar DWT with stride=2
-        """
-        B, C, H, W = x.shape
+        """Haar DWT with stride=2."""
+        _B, C, H, W = x.shape
 
         pad_h = H % 2
         pad_w = W % 2
@@ -3025,10 +2989,7 @@ class WaveletSpatialAttention(nn.Module):
 
 
 class MSCM(nn.Module):
-    """
-    Mixed Spatial-Channel Modulation
-    输入: 融合后的频域特征
-    输出: 综合 gate (B, C, H, W)
+    """Mixed Spatial-Channel Modulation 输入: 融合后的频域特征 输出: 综合 gate (B, C, H, W).
     """
 
     def __init__(self, channels, reduction=4):
@@ -3062,14 +3023,8 @@ class MSCM(nn.Module):
 
 # ================= WCA Head Input =================
 class WCALite(nn.Module):
-    """
-    更贴近论文思路的 WCA:
-    1) DWT 分成低频 LL 和 高频(H)
-    2) 高低频融合
-    3) 经过 MSCM 得到 channel+local 综合门控
-    4) gate 与高频逐像素相乘
-    5) 与低频相加，保留低频内容
-    6) 上采样回原尺寸，作为 head 输入
+    """更贴近论文思路的 WCA: 1) DWT 分成低频 LL 和 高频(H) 2) 高低频融合 3) 经过 MSCM 得到 channel+local 综合门控 4) gate 与高频逐像素相乘 5) 与低频相加，保留低频内容
+    6) 上采样回原尺寸，作为 head 输入.
     """
 
     def __init__(self, channels, reduction=4, preserve_residual=True):
@@ -3101,7 +3056,7 @@ class WCALite(nn.Module):
         self.out_proj = nn.Sequential(nn.Conv2d(channels, channels, 1, bias=False), nn.BatchNorm2d(channels), nn.SiLU())
 
     def dwt(self, x):
-        B, C, H, W = x.shape
+        _B, C, H, W = x.shape
         pad_h = H % 2
         pad_w = W % 2
 
@@ -3152,9 +3107,7 @@ class WCALite(nn.Module):
 
 
 class PGCR(nn.Module):
-    """
-    Prototype-Guided Classification Refinement
-    适用于 YOLOv8 Detect 中 cls 分支前的特征增强
+    """Prototype-Guided Classification Refinement 适用于 YOLOv8 Detect 中 cls 分支前的特征增强.
 
     输入:
         x: [B, C, H, W]
@@ -3223,9 +3176,7 @@ class PGCR(nn.Module):
             self.norm = nn.Identity()
 
     def forward(self, x):
-        """
-        x: [B, C, H, W]
-        """
+        """X: [B, C, H, W]."""
         B, C, H, W = x.shape
         HW = H * W
 
@@ -3741,12 +3692,8 @@ class NeckNoiseGate(nn.Module):
 
 
 class PGCR_EMA_Cosine_MSCM_old(nn.Module):
-    """
-    改动说明：
-    1. 保留原型重构逻辑：q -> cosine assign -> prototype reconstruction -> q_rec
-    2. gate 不再来自 channel/local branch
-    3. gate 改成：只对“位置编码序列”做 self-attention，得到纯空间注意力
-    4. 最终输出：out = x + gate * q_rec
+    """改动说明： 1. 保留原型重构逻辑：q -> cosine assign -> prototype reconstruction -> q_rec 2. gate 不再来自 channel/local branch 3.
+    gate 改成：只对“位置编码序列”做 self-attention，得到纯空间注意力 4. 最终输出：out = x + gate * q_rec.
 
     注意：
     - 这里 gate 只依赖位置，不依赖图像内容
@@ -3793,7 +3740,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         self.use_gaussian_scaling = use_gaussian_scaling
         self.gate_use_softmax = gate_use_softmax
 
-        hidden = max(channels // reduction, 16)
+        max(channels // reduction, 16)
 
         # --------------------------------
         # feature projection
@@ -3851,16 +3798,13 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         return P_mean, P_var
 
     def _gaussian_scale(self, q_flat, P_mean, P_var):
-        """
-        根据 prototype 的高斯分布，对 cosine similarity 做缩放。
-        这里不用完整pdf乘积，避免高维下严重下溢，
-        改用“按通道均值后的负二次项”来构造稳定的概率型缩放。
+        """根据 prototype 的高斯分布，对 cosine similarity 做缩放。 这里不用完整pdf乘积，避免高维下严重下溢， 改用“按通道均值后的负二次项”来构造稳定的概率型缩放。.
 
         q_flat: [B, HW, C]
         P_mean: [B, M, C]
         P_var:  [B, M, C]
 
-        return:
+        Returns:
             scale: [B, HW, M], 数值在(0,1]
         """
         q_exp = q_flat.unsqueeze(2)  # [B, HW, 1, C]
@@ -3874,14 +3818,14 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         return scale
 
     def _cosine_assign(self, q_flat):
-        """
-        q_flat: [B, HW, C]
-        return:
-            A:      [B, HW, M]
+        """q_flat: [B, HW, C].
+
+        Returns:
+            A: [B, HW, M]
             P_mean: [B, M, C]
-            P_var:  [B, M, C]
+            P_var: [B, M, C].
         """
-        B, HW, C = q_flat.shape
+        B, _HW, _C = q_flat.shape
 
         P_mean, P_var = self._get_prototypes(B)
 
@@ -3906,9 +3850,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
 
     @torch.no_grad()
     def _ema_update_prototypes(self, q_flat, A):
-        """
-        q_flat: [B, HW, C]
-        A:      [B, HW, M]
+        """q_flat: [B, HW, C] A: [B, HW, M].
         """
         q_norm = F.normalize(q_flat, dim=-1, eps=self.eps)  # [B, HW, C]
 
@@ -3931,9 +3873,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         self.prototypes_var.copy_(new_var)
 
     def _kl_divergence(self):
-        """
-        KL( N(mu, var) || N(0,1) )
-        对角高斯版本
+        """KL( N(mu, var) || N(0,1) ) 对角高斯版本.
         """
         p_mean = self.prototypes_mean
         p_var = self.prototypes_var.clamp_min(1e-4)
@@ -3945,9 +3885,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
     # positional self-attention gate
     # =========================================================
     def _build_2d_sincos_pos_embed(self, H, W, C, device, dtype):
-        """
-        生成 [1, HW, C] 的 2D sin-cos 位置编码
-        """
+        """生成 [1, HW, C] 的 2D sin-cos 位置编码."""
         assert C % 4 == 0, "channels 必须能被 4 整除"
 
         y = torch.arange(H, device=device, dtype=dtype)
@@ -3969,10 +3907,9 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         return pos.unsqueeze(0)  # [1, HW, C]
 
     def _position_self_attention_gate(self, B, H, W, device, dtype):
-        """
-        只对位置编码做 SA，生成纯空间 gate
+        """只对位置编码做 SA，生成纯空间 gate.
 
-        return:
+        Returns:
             gate: [B, 1, H, W]
         """
         pos = self._build_2d_sincos_pos_embed(H, W, self.channels, device, dtype)  # [1, HW, C]
@@ -3996,9 +3933,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
     # forward
     # =========================================================
     def forward(self, x):
-        """
-        x: [B, C, H, W]
-        """
+        """X: [B, C, H, W]."""
         B, C, H, W = x.shape
         HW = H * W
 
@@ -4009,7 +3944,7 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
         q_flat = q.view(B, C, HW).permute(0, 2, 1).contiguous()  # [B, HW, C]
 
         # 2) prototype assignment + prototype reconstruction
-        A, P_mean, P_var = self._cosine_assign(q_flat)  # A:[B,HW,M], P_mean:[B,M,C]
+        A, P_mean, _P_var = self._cosine_assign(q_flat)  # A:[B,HW,M], P_mean:[B,M,C]
         q_rec_flat = torch.bmm(A, P_mean)  # [B, HW, C]
         q_rec = q_rec_flat.permute(0, 2, 1).contiguous().view(B, C, H, W)
         q_rec = self.recon_proj(q_rec)  # [B, C, H, W]
@@ -4044,12 +3979,8 @@ class PGCR_EMA_Cosine_MSCM_old(nn.Module):
 
 
 class PGCR_EMA_Cosine_MSCM(nn.Module):
-    """
-    改进版：
-    1. 保留 prototype reconstruction
-    2. gate 使用 q_rec + hybrid positional embedding
-    3. hybrid positional embedding = sin-cos + learnable(可插值)
-    4. 输出: out = x + gate * q_rec
+    """改进版： 1. 保留 prototype reconstruction 2. gate 使用 q_rec + hybrid positional embedding 3. hybrid positional embedding
+    = sin-cos + learnable(可插值) 4. 输出: out = x + gate * q_rec.
     """
 
     def __init__(
@@ -4157,12 +4088,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         return P_mean, P_var
 
     def _gaussian_scale(self, q_flat, P_mean, P_var):
-        """
-        用 prototype 的高斯统计，对 cosine sim 做缩放
-        q_flat: [B,HW,C]
-        P_mean: [B,M,C]
-        P_var: [B,M,C]
-        return: [B,HW,M]
+        """用 prototype 的高斯统计，对 cosine sim 做缩放 q_flat: [B,HW,C] P_mean: [B,M,C] P_var: [B,M,C] return: [B,HW,M].
         """
         q_exp = q_flat.unsqueeze(2)  # [B,HW,1,C]
         mu_exp = P_mean.unsqueeze(1)  # [B,1,M,C]
@@ -4175,14 +4101,14 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         return scale
 
     def _cosine_assign(self, q_flat):
-        """
-        q_flat: [B, HW, C]
-        return:
-            A:      [B, HW, M]
+        """q_flat: [B, HW, C].
+
+        Returns:
+            A: [B, HW, M]
             P_mean: [B, M, C]
-            P_var:  [B, M, C]
+            P_var: [B, M, C].
         """
-        B, HW, C = q_flat.shape
+        B, _HW, _C = q_flat.shape
         P_mean, P_var = self._get_prototypes(B)
 
         std = torch.sqrt(P_var.clamp_min(1e-4))
@@ -4204,9 +4130,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
 
     @torch.no_grad()
     def _ema_update_prototypes(self, q_flat, A):
-        """
-        q_flat: [B, HW, C]
-        A: [B, HW, M]
+        """q_flat: [B, HW, C] A: [B, HW, M].
         """
         q_norm = F.normalize(q_flat, dim=-1, eps=self.eps)  # [B,HW,C]
 
@@ -4227,9 +4151,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         self.prototypes_var.copy_(new_var)
 
     def _kl_divergence(self):
-        """
-        KL( N(mu,var) || N(0,1) )
-        """
+        """KL( N(mu,var) || N(0,1) )."""
         p_mean = self.prototypes_mean
         p_var = self.prototypes_var.clamp_min(1e-4)
 
@@ -4240,9 +4162,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
     # hybrid positional embedding
     # =========================================================
     def _build_2d_sincos_pos_embed(self, H, W, C, device, dtype):
-        """
-        return: [1, HW, C]
-        """
+        """Return: [1, HW, C]."""
         assert C % 4 == 0, "channels 必须能被4整除"
 
         y = torch.arange(H, device=device, dtype=dtype)
@@ -4264,9 +4184,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         return pos.unsqueeze(0)  # [1,HW,C]
 
     def _get_learnable_pos_embed(self, H, W, B, device, dtype):
-        """
-        learnable pos 从基础尺寸插值到当前尺寸
-        return: [B, HW, C]
+        """Learnable pos 从基础尺寸插值到当前尺寸 return: [B, HW, C].
         """
         pos = F.interpolate(self.learnable_pos, size=(H, W), mode="bilinear", align_corners=False)  # [1,C,H,W]
         pos = pos.to(device=device, dtype=dtype)
@@ -4275,9 +4193,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         return pos
 
     def _get_hybrid_pos_embed(self, H, W, B, device, dtype):
-        """
-        sin-cos + learnable
-        return: [B, HW, C]
+        """sin-cos + learnable return: [B, HW, C].
         """
         pos_sincos = self._build_2d_sincos_pos_embed(H, W, self.channels, device, dtype)  # [1,HW,C]
         pos_sincos = pos_sincos.expand(B, -1, -1)  # [B,HW,C]
@@ -4291,11 +4207,9 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
     # gate
     # =========================================================
     def _generate_gate(self, q_rec, H, W):
+        """q_rec: [B,C,H,W] return gate: [B,1,H,W].
         """
-        q_rec: [B,C,H,W]
-        return gate: [B,1,H,W]
-        """
-        B, C, _, _ = q_rec.shape
+        B, _C, _, _ = q_rec.shape
 
         q_rec_flat = q_rec.flatten(2).transpose(1, 2).contiguous()  # [B,HW,C]
         pos = self._get_hybrid_pos_embed(H, W, B, q_rec.device, q_rec.dtype)  # [B,HW,C]
@@ -4322,9 +4236,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
     # forward
     # =========================================================
     def forward(self, x):
-        """
-        x: [B,C,H,W]
-        """
+        """X: [B,C,H,W]."""
         B, C, H, W = x.shape
         HW = H * W
 
@@ -4335,7 +4247,7 @@ class PGCR_EMA_Cosine_MSCM(nn.Module):
         q_flat = q.view(B, C, HW).permute(0, 2, 1).contiguous()  # [B,HW,C]
 
         # 2) prototype reconstruction
-        A, P_mean, P_var = self._cosine_assign(q_flat)  # A:[B,HW,M]
+        A, P_mean, _P_var = self._cosine_assign(q_flat)  # A:[B,HW,M]
         q_rec_flat = torch.bmm(A, P_mean)  # [B,HW,C]
         q_rec = q_rec_flat.permute(0, 2, 1).contiguous().view(B, C, H, W)
         q_rec = self.recon_proj(q_rec)  # [B,C,H,W]
@@ -4405,13 +4317,7 @@ class C2f_DSC(nn.Module):
 
 
 class ProtoGRUCell(nn.Module):
-    """
-    对每个 prototype 槽位做共享参数的 GRU-style 更新
-    输入:
-        p_old: [B, M, C]
-        p_new: [B, M, C]
-    输出:
-        p:     [B, M, C]
+    """对每个 prototype 槽位做共享参数的 GRU-style 更新 输入: p_old: [B, M, C] p_new: [B, M, C] 输出: p: [B, M, C].
     """
 
     def __init__(self, channels, reduction=4):
@@ -4436,8 +4342,7 @@ class ProtoGRUCell(nn.Module):
 
 
 class PGCR_Recurrent(nn.Module):
-    """
-    基于你当前 SOTA PGCR 的“单图递归精炼版”
+    """基于你当前 SOTA PGCR 的“单图递归精炼版”.
 
     核心思想：
     1) prototype 仍然来自当前图像
@@ -4510,10 +4415,10 @@ class PGCR_Recurrent(nn.Module):
         self.norm = nn.BatchNorm2d(channels) if use_norm else nn.Identity()
 
     def _get_assign_map(self, feat):
-        """
-        feat: [B, C, H, W]
-        return:
-            assign_map: [B, HW, M]
+        """feat: [B, C, H, W].
+
+        Returns:
+            assign_map: [B, HW, M].
         """
         B, _, H, W = feat.shape
         HW = H * W
@@ -4524,12 +4429,10 @@ class PGCR_Recurrent(nn.Module):
         return assign_map
 
     def _aggregate_prototypes(self, x, assign_map):
-        """
-        用原始 x 聚合 prototype
-        x: [B, C, H, W]
-        assign_map: [B, HW, M]
-        return:
-            prototypes: [B, M, C]
+        """用原始 x 聚合 prototype x: [B, C, H, W] assign_map: [B, HW, M].
+
+        Returns:
+            prototypes: [B, M, C].
         """
         B, C, H, W = x.shape
         HW = H * W
@@ -4543,13 +4446,12 @@ class PGCR_Recurrent(nn.Module):
         return prototypes
 
     def _write_back(self, assign_map, prototypes, H, W):
+        """assign_map: [B, HW, M] prototypes: [B, M, C].
+
+        Returns:
+            recon: [B, C, H, W].
         """
-        assign_map: [B, HW, M]
-        prototypes: [B, M, C]
-        return:
-            recon: [B, C, H, W]
-        """
-        B, HW, _ = assign_map.shape
+        B, _HW, _ = assign_map.shape
         C = prototypes.shape[-1]
 
         recon = torch.bmm(assign_map, prototypes)  # [B, HW, C]
@@ -4558,9 +4460,7 @@ class PGCR_Recurrent(nn.Module):
         return recon
 
     def _maybe_add_global_ref(self, prototypes):
-        """
-        prototypes: [B, M, C]
-        用弱全局 prototype 做初始化参考
+        """prototypes: [B, M, C] 用弱全局 prototype 做初始化参考.
         """
         if not self.use_global_ref:
             return prototypes
@@ -4572,10 +4472,8 @@ class PGCR_Recurrent(nn.Module):
         return prototypes
 
     def forward(self, x):
-        """
-        x: [B, C, H, W]
-        """
-        B, C, H, W = x.shape
+        """X: [B, C, H, W]."""
+        _B, _C, H, W = x.shape
 
         # --------------------------------------------------
         # Step 0: 初始 assignment 与 prototype
