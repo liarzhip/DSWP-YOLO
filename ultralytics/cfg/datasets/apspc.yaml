@@ -7,18 +7,7 @@ test: test/images # 测试集图片路径
 
 # 类别配置
 nc: 10 # 类别数
-names: [
-    "budaodian",
-    "zangdian",
-    "qikeng",
-    "cahua",
-    "jupi",
-    "tufen",
-    "aoxian",
-    "loudi",
-    "tucengkailie",
-    "pengshang",
-  ] # 按你的标注类别顺序填写
+names: ["budaodian", "zangdian", "qikeng", "cahua", "jupi", "tufen", "aoxian", "loudi", "tucengkailie", "pengshang"] # 按你的标注类别顺序填写
 
 # 增强配置（可选，针对小目标）
 hsv_h: 0.015 # 色相增强
