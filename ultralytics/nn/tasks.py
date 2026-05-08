@@ -1,8 +1,4 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-from .modules.block import (C2fWP, C2fW, C2fP,PSPPF,WCALite,PGCR,C2f_DSC,
-                            GSConv, GSConvE, SNI, GSConvE2, ESD, ESD2,
-                            GSBottleneckC, GSBottleneck, VoVGSCSP,VoVGSCSPW,
-                            NeckNoiseGate,)
 import contextlib
 import pickle
 import re
@@ -99,6 +95,27 @@ from ultralytics.utils.torch_utils import (
     scale_img,
     smart_inference_mode,
     time_sync,
+)
+
+from .modules.block import (
+    ESD,
+    ESD2,
+    PGCR,
+    PSPPF,
+    SNI,
+    C2f_DSC,
+    C2fP,
+    C2fW,
+    C2fWP,
+    GSBottleneck,
+    GSBottleneckC,
+    GSConv,
+    GSConvE,
+    GSConvE2,
+    NeckNoiseGate,
+    VoVGSCSP,
+    VoVGSCSPW,
+    WCALite,
 )
 
 
@@ -1593,9 +1610,20 @@ def parse_model(d, ch, verbose=True):
             C1,
             C2,
             C2f,
-            C2fWP,C2fW,C2fP,PSPPF,WCALite,PGCR,C2f_DSC,
-            GSBottleneckC, GSBottleneck, VoVGSCSP,VoVGSCSPW,
-            GSConv,GSConvE,GSConvE2,
+            C2fWP,
+            C2fW,
+            C2fP,
+            PSPPF,
+            WCALite,
+            PGCR,
+            C2f_DSC,
+            GSBottleneckC,
+            GSBottleneck,
+            VoVGSCSP,
+            VoVGSCSPW,
+            GSConv,
+            GSConvE,
+            GSConvE2,
             # NeckNoiseGate,
             ESD,
             ESD2,
@@ -1624,9 +1652,11 @@ def parse_model(d, ch, verbose=True):
             BottleneckCSP,
             C1,
             C2,
-            C2f,C2f_DSC,
+            C2f,
+            C2f_DSC,
             # C2fWP,C2fW,C2fP,
-            VoVGSCSP,VoVGSCSPW,
+            VoVGSCSP,
+            VoVGSCSPW,
             C3k2,
             C2fAttn,
             C3,
