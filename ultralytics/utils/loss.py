@@ -8,7 +8,6 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import KLDivLoss
 
 from ultralytics.utils.metrics import OKS_SIGMA, RLE_WEIGHT
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
@@ -18,7 +17,6 @@ from ultralytics.utils.torch_utils import autocast
 from .metrics import bbox_iou, probiou
 from .tal import bbox2dist, rbox2dist
 
-from ..nn.modules.block import KL_LOSS_CONTAINER
 
 class VarifocalLoss(nn.Module):
     """Varifocal loss by Zhang et al.
@@ -103,20 +101,20 @@ class DFLoss(nn.Module):
         wl = tr - target  # weight left
         wr = 1 - wl  # weight right
         return (
-                F.cross_entropy(pred_dist, tl.view(-1), reduction="none").view(tl.shape) * wl
-                + F.cross_entropy(pred_dist, tr.view(-1), reduction="none").view(tl.shape) * wr
+            F.cross_entropy(pred_dist, tl.view(-1), reduction="none").view(tl.shape) * wl
+            + F.cross_entropy(pred_dist, tr.view(-1), reduction="none").view(tl.shape) * wr
         ).mean(-1, keepdim=True)
 
 
 class BboxLoss(nn.Module):
     """Criterion class for computing training losses for bounding boxes (新增EIoU/WIoU/Focal-EIoU)."""
 
-    def __init__(self, reg_max: int = 16, loss_type: str = 'wiou_v3'):
-        """
-        Initialize the BboxLoss module with loss type selection.
+    def __init__(self, reg_max: int = 16, loss_type: str = "wiou_v3"):
+        """Initialize the BboxLoss module with loss type selection.
+
         Args:
             reg_max: DFL regularization maximum
-            loss_type: 损失类型，可选['ciou', 'eiou', 'wiou_v3', 'focal_eiou']
+            loss_type: 损失类型，可选['ciou', 'eiou', 'wiou_v3', 'focal_eiou'].
         """
         super().__init__()
         self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
@@ -129,16 +127,16 @@ class BboxLoss(nn.Module):
         self.wiou_delta = 3.0
 
     def forward(
-            self,
-            pred_dist: torch.Tensor,
-            pred_bboxes: torch.Tensor,
-            anchor_points: torch.Tensor,
-            target_bboxes: torch.Tensor,
-            target_scores: torch.Tensor,
-            target_scores_sum: torch.Tensor,
-            fg_mask: torch.Tensor,
-            imgsz: torch.Tensor,
-            stride: torch.Tensor,
+        self,
+        pred_dist: torch.Tensor,
+        pred_bboxes: torch.Tensor,
+        anchor_points: torch.Tensor,
+        target_bboxes: torch.Tensor,
+        target_scores: torch.Tensor,
+        target_scores_sum: torch.Tensor,
+        fg_mask: torch.Tensor,
+        imgsz: torch.Tensor,
+        stride: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute IoU/DFL losses with support for EIoU/WIoU/Focal-EIoU."""
         # 仅计算前景样本损失
@@ -150,22 +148,22 @@ class BboxLoss(nn.Module):
         target_bboxes_fg = target_bboxes[fg_mask]
 
         # ========== 核心：切换不同IoU损失 ==========
-        if self.loss_type == 'ciou':
+        if self.loss_type == "ciou":
             # 官方原CIoU逻辑
             iou = bbox_iou(pred_bboxes_fg, target_bboxes_fg, xywh=False, CIoU=True)
             loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
 
-        elif self.loss_type == 'wiou_v3':
+        elif self.loss_type == "wiou_v3":
             # WIoU v3损失（动态加权，适配样本不均衡）
             wiou_v3_loss = self.wiou_v3(pred_bboxes_fg, target_bboxes_fg, xywh=False)
             loss_iou = (wiou_v3_loss * weight).sum() / target_scores_sum  # 修正：直接用WIoU v3损失
 
-        elif self.loss_type == 'focal_eiou':
+        elif self.loss_type == "focal_eiou":
             # Focal-EIoU（聚焦难样本，工业缺陷首选）
             focal_eiou_loss = self.focal_eiou(pred_bboxes_fg, target_bboxes_fg)
             loss_iou = (focal_eiou_loss * weight).sum() / target_scores_sum  # 修正：无需额外加权
 
-        elif self.loss_type == 'eiou':
+        elif self.loss_type == "eiou":
             # 补充EIoU损失（完整逻辑）
             eiou_loss = self.eiou(pred_bboxes_fg, target_bboxes_fg, xywh=False)
             loss_iou = ((1.0 - eiou_loss) * weight).sum() / target_scores_sum
@@ -189,8 +187,7 @@ class BboxLoss(nn.Module):
             pred_dist[..., 0::2] /= imgsz[1]
             pred_dist[..., 1::2] /= imgsz[0]
             loss_dfl = (
-                    F.l1_loss(pred_dist[fg_mask], target_ltrb[fg_mask], reduction="none").mean(-1,
-                                                                                               keepdim=True) * weight
+                F.l1_loss(pred_dist[fg_mask], target_ltrb[fg_mask], reduction="none").mean(-1, keepdim=True) * weight
             )
             loss_dfl = loss_dfl.sum() / target_scores_sum
 
@@ -198,7 +195,7 @@ class BboxLoss(nn.Module):
 
     # ==================== 1. Focal-EIoU 函数（严格对齐论文） ====================
     def focal_eiou(self, box1, box2, eps=1e-7):
-        """严格对齐论文的 Focal-EIoU 公式：L_Focal-EIoU = IoU^γ * L_EIoU"""
+        """严格对齐论文的 Focal-EIoU 公式：L_Focal-EIoU = IoU^γ * L_EIoU."""
         (b1_x1, b1_y1, b1_x2, b1_y2) = box1.chunk(4, -1)
         (b2_x1, b2_y1, b2_x2, b2_y2) = box2.chunk(4, -1)
 
@@ -208,15 +205,16 @@ class BboxLoss(nn.Module):
         h2 = b2_y2 - b2_y1
 
         # 计算 IoU
-        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
-                (torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)).clamp(0)
+        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * (
+            torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)
+        ).clamp(0)
         union = w1 * h1 + w2 * h2 - inter + eps
         iou = inter / union
 
         # 计算 EIoU 各项
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)  # w_C
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)  # h_C
-        c2 = cw ** 2 + ch ** 2 + eps
+        c2 = cw**2 + ch**2 + eps
 
         # 中心点距离 ρ²(P,G)
         rho2_pg = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4
@@ -226,16 +224,16 @@ class BboxLoss(nn.Module):
         rho2_h = (h1 - h2) ** 2
 
         # 论文中的 L_EIoU
-        L_EIoU = 1 - iou + rho2_pg / c2 + rho2_w / (cw ** 2 + eps) + rho2_h / (ch ** 2 + eps)
+        L_EIoU = 1 - iou + rho2_pg / c2 + rho2_w / (cw**2 + eps) + rho2_h / (ch**2 + eps)
 
         # 论文中的 Focal-EIoU（使用类内最优γ=0.5）
-        L_Focal_EIoU = (iou ** self.focal_gamma) * L_EIoU
+        L_Focal_EIoU = (iou**self.focal_gamma) * L_EIoU
 
         return L_Focal_EIoU
 
     # ==================== 2. EIoU 辅助函数 ====================
     def eiou(self, box1, box2, xywh=True, eps=1e-7):
-        """EIoU损失计算（完整逻辑）"""
+        """EIoU损失计算（完整逻辑）."""
         if xywh:
             (x1, y1, w1, h1), (x2, y2, w2, h2) = box1.chunk(4, -1), box2.chunk(4, -1)
             w1_, h1_, w2_, h2_ = w1 / 2, h1 / 2, w2 / 2, h2 / 2
@@ -248,19 +246,19 @@ class BboxLoss(nn.Module):
             w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
 
         # IoU
-        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
-                (torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)).clamp(0)
+        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * (
+            torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)
+        ).clamp(0)
         union = w1 * h1 + w2 * h2 - inter + eps
         iou = inter / union
 
         # EIoU
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)
-        c2 = cw ** 2 + ch ** 2 + eps
-        rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 +
-                (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4
-        w2 = (w1 - w2) ** 2 / (cw ** 2 + eps)
-        h2 = (h1 - h2) ** 2 / (ch ** 2 + eps)
+        c2 = cw**2 + ch**2 + eps
+        rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4
+        w2 = (w1 - w2) ** 2 / (cw**2 + eps)
+        h2 = (h1 - h2) ** 2 / (ch**2 + eps)
         eiou = iou - (rho2 / c2 + w2 + h2)
         return eiou
 
@@ -271,7 +269,7 @@ class BboxLoss(nn.Module):
         :param box1: 预测框，shape=[B, 4] 或 [B, N, 4]，格式(x1,y1,x2,y2)
         :param box2: 真实框，shape同box1
         :param xywh: 是否为xywh格式（默认xyxy）
-        :return: wiou_v3_loss，shape同box1[:,0]
+        :return: wiou_v3_loss，shape同box1[:,0].
         """
         # 格式转换：xywh → xyxy
         if xywh:
@@ -290,8 +288,9 @@ class BboxLoss(nn.Module):
 
         # -------------------------- 2. 计算IoU和IoU损失 --------------------------
         # 交集
-        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
-                (torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)).clamp(0)
+        inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * (
+            torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)
+        ).clamp(0)
         # 并集
         union = w1 * h1 + w2 * h2 - inter + eps
         # IoU
@@ -303,10 +302,9 @@ class BboxLoss(nn.Module):
         # 最小外接矩形的宽/高/对角线平方
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)
-        c2 = cw ** 2 + ch ** 2 + eps
+        c2 = cw**2 + ch**2 + eps
         # 中心点距离平方
-        rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 +
-                (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4
+        rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4
         # WIoU v1 基础损失
         wiou_v1 = iou - rho2 / c2
         wiou_v1_loss = 1.0 - wiou_v1  # 转为损失
@@ -321,7 +319,7 @@ class BboxLoss(nn.Module):
         # -------------------------- 5. 计算梯度增益r（非单调聚焦） --------------------------
         # 论文公式：r = β / (δ * α^(β - δ))
         exponent = beta - self.wiou_delta
-        denominator = self.wiou_delta * (self.wiou_alpha ** exponent) + eps
+        denominator = self.wiou_delta * (self.wiou_alpha**exponent) + eps
         r = beta / denominator
 
         # -------------------------- 6. 计算WIoU v3最终损失 --------------------------
