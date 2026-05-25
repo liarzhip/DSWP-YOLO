@@ -17,11 +17,9 @@ from ultralytics.utils.torch_utils import TORCH_1_11, fuse_conv_and_bn, smart_in
 
 from .block import (
     DFL,
-    PGCR,
     SAVPE,
     BNContrastiveHead,
     ContrastiveHead,
-    PGCR_EMA_Cosine_MSCM,
     PGCR_Recurrent,
     Proto,
     Proto26,
@@ -38,9 +36,7 @@ __all__ = "OBB", "Classify", "Detect", "Pose", "RTDETRDecoder", "Segment", "YOLO
 
 
 def window_partition(x, window_size):
-    """
-    x: [B, C, H, W]
-    return: windows [B*nW, window_size*window_size, C]
+    """x: [B, C, H, W] return: windows [B*nW, window_size*window_size, C].
     """
     B, C, H, W = x.shape
     x = x.view(B, C, H // window_size, window_size, W // window_size, window_size)
@@ -50,9 +46,7 @@ def window_partition(x, window_size):
 
 
 def window_reverse(windows, window_size, H, W, B):
-    """
-    windows: [B*nW, window_size*window_size, C]
-    return: x [B, C, H, W]
+    """windows: [B*nW, window_size*window_size, C] return: x [B, C, H, W].
     """
     C = windows.shape[-1]
     nWh = H // window_size
@@ -64,11 +58,7 @@ def window_reverse(windows, window_size, H, W, B):
 
 
 class SAFusionLite(nn.Module):
-    """
-    轻量 SA:
-    输入 F_pre
-    输出 SA(F_pre)
-    不做大残差，残差在外部模块里完成
+    """轻量 SA: 输入 F_pre 输出 SA(F_pre) 不做大残差，残差在外部模块里完成.
     """
 
     def __init__(self, channels, num_heads=4, window_size=7, reduction=4):
@@ -146,14 +136,8 @@ class SAFusionLite(nn.Module):
 
 
 class WCAPGCRSAFusion(nn.Module):
-    """
-    按论文右上角拓扑改写的 YOLO 版:
-        Fw = WCA(x)
-        Fp = PGCR(x)
-        Fpre = Fuse(Fw, Fp)
-        Fsa = SA(Fpre)
-        Fout = Fsa + Fpre   # 注意：残差接在 SA 前后
-    最后输出给 cls 分支
+    """按论文右上角拓扑改写的 YOLO 版: Fw = WCA(x) Fp = PGCR(x) Fpre = Fuse(Fw, Fp) Fsa = SA(Fpre) Fout = Fsa + Fpre # 注意：残差接在 SA 前后
+    最后输出给 cls 分支.
 
     参数:
         channels: 输入通道
@@ -345,7 +329,6 @@ class Detect(nn.Module):
         self, x: list[torch.Tensor]
     ) -> dict[str, torch.Tensor] | torch.Tensor | tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Concatenates and returns predicted bounding boxes and class probabilities."""
-
         # 兼容旧 checkpoint：旧模型可能没有 cls_refine / one2one_cls_refine
         cls_refine = getattr(self, "cls_refine", None)
         one2many = getattr(self, "one2many", {})
